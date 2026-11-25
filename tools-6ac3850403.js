@@ -1,7 +1,7 @@
 (function(){"use strict";var m={},c={};function r(n){if(c[n])return c[n].exports;var o={exports:{}};c[n]=o;m[n](o,o.exports,r);return o.exports}
 m["./core"]=function(module,exports,require){"use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.varName = exports.esc = exports.totals = exports.amortI = exports.amortN = exports.excelNpvTrap = exports.signChanges = exports.npvAt = exports.expand = exports.MAX_COUNT = exports.MAX_GROUPS = exports.pyOf = exports.tvmOf = exports.PPY = exports.money = exports.PRECISION = exports.irrShowable = exports.shows = exports.disp = exports.CALC_NAME = exports.CALC_IDS = void 0;
+exports.bondTvm = exports.varName = exports.esc = exports.totals = exports.amortI = exports.amortN = exports.excelNpvTrap = exports.signChanges = exports.npvAt = exports.expand = exports.MAX_COUNT = exports.MAX_GROUPS = exports.pyOf = exports.tvmOf = exports.PPY = exports.money = exports.PRECISION = exports.irrShowable = exports.shows = exports.disp = exports.CALC_NAME = exports.CALC_IDS = void 0;
 exports.fixed = fixed;
 exports.group = group;
 exports.typed = typed;
@@ -25,6 +25,10 @@ exports.sacSteps = sacSteps;
 exports.keysHtml = keysHtml;
 exports.keysPanel = keysPanel;
 exports.tvmResults = tvmResults;
+exports.growthTable = growthTable;
+exports.tvmKeys = tvmKeys;
+exports.bondSolve = bondSolve;
+exports.bondResults = bondResults;
 exports.mistakeText = mistakeText;
 exports.npvResults = npvResults;
 exports.amortResults = amortResults;
@@ -104,6 +108,7 @@ exports.PPY = [12, 4, 2, 1];
 const SIGN = {
     loan: { pv: 1, pmt: -1, fv: -1 },
     save: { pv: -1, pmt: -1, fv: 1 },
+    bond: { pv: -1, pmt: 1, fv: 1 },
 };
 const tvmOf = (s) => ({
     n: s.nUnit === 'year' ? s.n * s.ppy : s.n,
@@ -631,6 +636,28 @@ function tvmResults(cfg, s, calc) {
     }
     const neg = s.solve !== 'n' && s.solve !== 'rate' && v * sgn < 0;
     const warn = neg ? `<p class="note">${(0, exports.esc)(L(cfg, 'The answer is negative: with these numbers the money flows the other way. Check the Loan / Savings choice.', 'A resposta saiu negativa: com estes números o dinheiro vai no sentido contrário. Confira a escolha Financiamento / Aplicação.'))}</p>` : '';
+    return `<div class="cards-out">${cards.join('')}</div>${warn}${s.kind === 'save' && s.solve === 'fv' ? growthTable(cfg, s) : ''}${tvmKeys(cfg, s, calc)}`;
+}
+function growthTable(cfg, s) {
+    const lang = cfg.lang, t = (0, exports.tvmOf)(s);
+    if (t.n < 2)
+        return '';
+    const at = (k) => {
+        const g = (1 + t.i) ** k, a = Math.abs(t.i) < 1e-12 ? k : (g - 1) / t.i;
+        return -(t.pv * g + t.pmt * (1 + (t.b ? t.i : 0)) * a);
+    };
+    const ks = [];
+    for (let k = s.ppy; k < t.n; k += s.ppy)
+        ks.push(k);
+    ks.push(t.n);
+    const rows = ks.map((k) => {
+        const inv = Math.abs(t.pv) + Math.abs(t.pmt) * k, bal = at(k);
+        return `<tr><td class="n">${(0, exports.money)(k / s.ppy, lang, Number.isInteger(k / s.ppy) ? 0 : 2)}</td><td class="r">${(0, exports.money)(inv, lang)}</td><td class="r">${(0, exports.money)(bal - inv, lang)}</td><td class="r">${(0, exports.money)(bal, lang)}</td></tr>`;
+    }).join('');
+    return `<details class="sched"><summary>${tx(lang, 'Year by year', 'Ano a ano')}</summary><div class="tw"><table class="num-t"><thead><tr><th>${tx(lang, 'Year', 'Ano')}</th><th>${tx(lang, 'Put in', 'Investido')}</th><th>${tx(lang, 'Interest', 'Juros')}</th><th>${tx(lang, 'Balance', 'Saldo')}</th></tr></thead><tbody>${rows}</tbody></table></div></details>`;
+}
+function tvmKeys(cfg, s, calc) {
+    const lang = cfg.lang;
     const steps = tvmSteps(calc, s, lang);
     const mistakes = tvmMistakes(calc, s);
     const wrongRows = mistakes.map((m) => {
@@ -638,7 +665,34 @@ function tvmResults(cfg, s, calc) {
         return `<tr><td>${lcd(shown, lang)}</td><td data-l="${w('why', lang)}">${(0, exports.esc)(mistakeText(calc, s, m.id, lang))}</td></tr>`;
     }).join('');
     const wrong = mistakes.length ? `<h3>${w('wrongTitle', lang)}</h3><p>${w('wrongIntro', lang)}</p><div class="tw"><table class="traps"><thead><tr><th>${w('youSee', lang)}</th><th>${w('why', lang)}</th></tr></thead><tbody>${wrongRows}</tbody></table></div>` : '';
-    return `<div class="cards-out">${cards.join('')}</div>${warn}${keysPanel(cfg, calc, steps, wrong)}`;
+    return keysPanel(cfg, calc, steps, wrong);
+}
+const bondTvm = (b) => ({
+    kind: 'bond', solve: b.solve === 'price' ? 'pv' : 'rate', n: b.years, nUnit: 'year', rate: b.ytm, ratePer: 'year',
+    pv: b.price, pmt: b.face * b.coupon / 100 / b.freq, fv: b.face, ppy: b.freq, begin: false,
+});
+exports.bondTvm = bondTvm;
+function bondSolve(b) {
+    const t = (0, exports.tvmOf)((0, exports.bondTvm)(b));
+    return b.solve === 'price' ? -tvmSolve(t, 'pv') : tvmSolve(t, 'rate') * 100 * b.freq;
+}
+function bondResults(cfg, b, calc) {
+    const lang = cfg.lang, s = (0, exports.bondTvm)(b);
+    const issues = tvmIssues(s);
+    if (issues.includes('n-int') || issues.includes('n-range'))
+        return `<p class="note">${(0, exports.esc)(L(cfg, 'Years to maturity must be a whole number of coupon periods (with semiannual coupons, steps of 0.5).', 'O prazo deve ser um número inteiro de períodos de cupom (com cupom semestral, de 0,5 em 0,5 ano).'))}</p>`;
+    const v = bondSolve(b);
+    if (!isFinite(v) || v <= 0)
+        return `<p class="note">${(0, exports.esc)(L(cfg, 'These numbers have no yield: the price must be positive and below the total of the coupons and the face value.', 'Estes números não têm taxa: o preço deve ser positivo e menor que a soma dos cupons e do valor de face.'))}</p>`;
+    const price = b.solve === 'price' ? v : b.price, ytm = b.solve === 'ytm' ? v : b.ytm;
+    const yearly = b.face * b.coupon / 100;
+    const cards = [
+        card(b.solve === 'price' ? tx(lang, 'Price', 'Preço') : tx(lang, 'Yield to maturity', 'Taxa até o vencimento (YTM)'), b.solve === 'price' ? (0, exports.money)(v, lang) : `${(0, exports.money)(v, lang, 4)}%`, b.solve === 'price' ? tx(lang, `${(0, exports.money)(v / b.face * 100, lang, 4)} per 100 of face value`, `${(0, exports.money)(v / b.face * 100, lang, 4)} por 100 de valor de face`) : tx(lang, `a year, compounded ${b.freq === 2 ? 'semiannually' : 'yearly'}`, `ao ano, capitalizada ${b.freq === 2 ? 'semestralmente' : 'anualmente'}`), true),
+        card(tx(lang, 'Current yield', 'Rendimento corrente'), `${(0, exports.money)(yearly / price * 100, lang, 4)}%`, tx(lang, 'yearly coupons ÷ price', 'cupons do ano ÷ preço')),
+        card(tx(lang, 'Coupon each period', 'Cupom por período'), (0, exports.money)(yearly / b.freq, lang)),
+        card(tx(lang, 'Trades at', 'Negociado'), Math.abs(price - b.face) < 0.005 ? tx(lang, 'par', 'ao par') : price < b.face ? tx(lang, 'a discount', 'com desconto (deságio)') : tx(lang, 'a premium', 'com prêmio (ágio)'), Math.abs(price - b.face) < 0.005 ? '' : tx(lang, `yield ${ytm > b.coupon ? 'above' : 'below'} the coupon rate`, `taxa ${ytm > b.coupon ? 'acima' : 'abaixo'} do cupom`)),
+    ];
+    return `<div class="cards-out">${cards.join('')}</div>${tvmKeys(cfg, s, calc)}`;
 }
 function mistakeText(calc, s, id, lang) {
     const py = (0, exports.pyOf)(s);
@@ -727,9 +781,11 @@ exports.tvmForm = tvmForm;
 exports.flowRow = flowRow;
 exports.npvForm = npvForm;
 exports.amortForm = amortForm;
+exports.bondForm = bondForm;
 exports.readTvm = readTvm;
 exports.readNpv = readNpv;
 exports.readAmort = readAmort;
+exports.readBond = readBond;
 exports.toQuery = toQuery;
 exports.fromQuery = fromQuery;
 const core_1 = require("./core");
@@ -782,6 +838,18 @@ ${field('n', t(lang, 'Term', 'Prazo'), v(s.n), select('nUnit', s.nUnit, [['pay',
 <div class="grid">
 ${field('from', t(lang, 'Keys for payments from', 'Teclas das parcelas de'), String(s.from))}
 ${field('to', t(lang, 'to', 'até'), String(s.to), '', t(lang, 'SAC: the keys work out the first one', 'SAC: as teclas calculam a primeira'))}
+</div>`;
+}
+function bondForm(b, lang) {
+    const v = (x) => (0, core_1.inputText)(x, lang);
+    return `<div class="row find"><span class="fl">${t(lang, 'Find', 'Calcular')}</span>${seg('solve', b.solve, [['price', t(lang, 'Price', 'Preço')], ['ytm', t(lang, 'Yield to maturity', 'Taxa (YTM)')]], t(lang, 'Find', 'Calcular'))}</div>
+<div class="grid">
+${field('face', t(lang, 'Face value', 'Valor de face'), v(b.face))}
+${field('coupon', t(lang, 'Coupon rate (% a year)', 'Cupom (% ao ano)'), v(b.coupon))}
+<label class="fld"><span class="fl">${t(lang, 'Coupons a year', 'Cupons por ano')}</span><span class="fi">${select('freq', String(b.freq), [['2', t(lang, '2 (semiannual)', '2 (semestral)')], ['1', t(lang, '1 (yearly)', '1 (anual)')]], t(lang, 'Coupons a year', 'Cupons por ano'))}</span></label>
+${field('years', t(lang, 'Years to maturity', 'Anos até o vencimento'), v(b.years))}
+${field('price', t(lang, 'Price', 'Preço'), v(b.price), '', '', b.solve === 'price')}
+${field('ytm', t(lang, 'Yield to maturity (% a year)', 'Taxa até o vencimento (% ao ano)'), v(b.ytm), '', '', b.solve === 'ytm')}
 </div>`;
 }
 const num = (get, name, lang, bad, ok, empty) => {
@@ -840,6 +908,21 @@ function readAmort(get, lang) {
     s.to = num(get, 'to', lang, bad, (x) => int(1, n)(x) && x >= s.from);
     return { state: bad.length ? null : s, bad };
 }
+function readBond(get, lang) {
+    const bad = [];
+    const solve = get('solve') === 'ytm' ? 'ytm' : 'price';
+    const freq = get('freq') === '1' ? 1 : 2;
+    const b = {
+        face: num(get, 'face', lang, bad, (x) => x > 0 && x < 1e8),
+        coupon: num(get, 'coupon', lang, bad, (x) => x >= 0 && x < 100),
+        freq,
+        years: num(get, 'years', lang, bad, (x) => x > 0 && Number.isInteger(Math.round(x * freq * 1e9) / 1e9) && x * freq <= 999),
+        price: solve === 'price' ? 0 : num(get, 'price', lang, bad, (x) => x > 0 && x < 1e8),
+        ytm: solve === 'ytm' ? 0 : num(get, 'ytm', lang, bad, (x) => x >= 0 && x < 100),
+        solve,
+    };
+    return { state: bad.length ? null : b, bad };
+}
 function toQuery(tool, s, calc) {
     const p = [];
     const n = (x) => String(Number(x.toPrecision(12)));
@@ -850,6 +933,10 @@ function toQuery(tool, s, calc) {
     else if (tool === 'npv') {
         const x = s;
         p.push(['r', n(x.rate)], ['cf0', n(x.cf0)], ['cf', x.flows.map((f) => `${n(f.a)}*${f.k}`).join('_')]);
+    }
+    else if (tool === 'bond') {
+        const x = s;
+        p.push(['s', x.solve], ['face', n(x.face)], ['cp', n(x.coupon)], ['f', String(x.freq)], ['y', n(x.years)], ['p', n(x.price)], ['ytm', n(x.ytm)]);
     }
     else {
         const x = s;
@@ -882,6 +969,13 @@ function fromQuery(tool, q, base) {
                 flows = parsed;
         }
         return { calc, state: { rate: f('r', b.rate), cf0: f('cf0', b.cf0), flows } };
+    }
+    if (tool === 'bond') {
+        const b = base;
+        return { calc, state: {
+                solve: one('s', ['price', 'ytm'], b.solve), face: f('face', b.face), coupon: f('cp', b.coupon), freq: [1, 2].includes(f('f', b.freq)) ? f('f', b.freq) : b.freq,
+                years: f('y', b.years), price: f('p', b.price), ytm: f('ytm', b.ytm),
+            } };
     }
     const b = base;
     return { calc, state: {
@@ -944,6 +1038,13 @@ function start() {
             set('cf0', (0, core_1.inputText)(x.cf0, lang));
             form.querySelector('.flows').innerHTML = x.flows.map((f, j) => (0, forms_1.flowRow)(f, j + 1, lang)).join('');
         }
+        else if (tool === 'bond') {
+            const x = s;
+            set('solve', x.solve);
+            set('freq', String(x.freq));
+            for (const k of ['face', 'coupon', 'years', 'price', 'ytm'])
+                set(k, (0, core_1.inputText)(x[k], lang));
+        }
         else {
             const x = s;
             set('pv', (0, core_1.inputText)(x.pv, lang));
@@ -965,6 +1066,8 @@ function start() {
             }));
             return (0, forms_1.readNpv)(get, rows, lang);
         }
+        if (tool === 'bond')
+            return (0, forms_1.readBond)(get, lang);
         return (0, forms_1.readAmort)(get, lang);
     }
     function mark(bad) {
@@ -982,7 +1085,8 @@ function start() {
     function render() {
         if (!current)
             return;
-        const html = tool === 'tvm' ? (0, core_1.tvmResults)(cfg, current, calc) : tool === 'npv' ? (0, core_1.npvResults)(cfg, current, calc) : (0, core_1.amortResults)(cfg, current, calc, all);
+        const html = tool === 'tvm' ? (0, core_1.tvmResults)(cfg, current, calc) : tool === 'npv' ? (0, core_1.npvResults)(cfg, current, calc)
+            : tool === 'bond' ? (0, core_1.bondResults)(cfg, current, calc) : (0, core_1.amortResults)(cfg, current, calc, all);
         if (html === shown && !out.querySelector('.fixit'))
             return;
         shown = html;
@@ -994,9 +1098,10 @@ function start() {
     }
     function update(remember = true) {
         var _a, _b;
-        if (tool === 'tvm') {
+        if (tool === 'tvm' || tool === 'bond') {
             const solve = get('solve');
-            root.dataset.kind = get('kind');
+            if (tool === 'tvm')
+                root.dataset.kind = get('kind');
             form.querySelectorAll('[data-f]').forEach((f) => {
                 const on = f.dataset.f === solve;
                 f.classList.toggle('solving', on);
@@ -1024,6 +1129,15 @@ function start() {
                 const val = s.solve === 'rate' ? Number((0, core_1.fixed)(v * 100 * (s.ratePer === 'year' ? s.ppy : 1), 4)) : s.solve === 'n' ? Number((0, core_1.fixed)(s.nUnit === 'year' ? v / s.ppy : v, 2)) : Number((0, core_1.fixed)(Math.abs(v), 2));
                 s[s.solve] = val;
                 set(s.solve, (0, core_1.inputText)(val, lang));
+            }
+            current = s;
+        }
+        else if (tool === 'bond') {
+            const s = Object.assign({}, current);
+            const v = (0, core_1.bondSolve)(s);
+            if (isFinite(v) && v > 0) {
+                s[s.solve] = Number((0, core_1.fixed)(v, s.solve === 'price' ? 2 : 4));
+                set(s.solve, (0, core_1.inputText)(s[s.solve], lang));
             }
             current = s;
         }
