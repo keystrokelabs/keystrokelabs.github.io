@@ -575,6 +575,8 @@ function calcPicker(cfg, calc) {
 }
 const L = (cfg, en, pt) => (cfg.lang === 'en' ? en : pt);
 function keysPanel(cfg, calc, steps, extra = '') {
+    if (cfg.keysOnEdit)
+        return `<section class="keyspanel"><p class="note">${(0, exports.esc)(L(cfg, `Change any number above: the keys for your numbers on the ${exports.CALC_NAME[calc]}, with the display after each step, appear here.`, `Mude qualquer número acima: as teclas para os seus números na ${exports.CALC_NAME[calc]}, com o visor a cada passo, aparecem aqui.`))}</p></section>`;
     const app = cfg.apps[calc];
     const qr = cfg.qr[calc];
     const cta = `<aside class="practise tool-cta"><div><p class="hero-h">${(0, exports.esc)(W.cta[cfg.lang].replace('{app}', app.app))}</p>
@@ -825,7 +827,7 @@ ${field('cf0', t(lang, 'Initial cash flow, CF0 (negative for an investment)', 'F
 </div>
 <p class="fl flows-h">${t(lang, 'Later cash flows, in order (amount × how many periods in a row)', 'Fluxos seguintes, em ordem (valor × quantos períodos seguidos)')}</p>
 <ol class="flows">${s.flows.map((f, j) => flowRow(f, j + 1, lang)).join('')}</ol>
-<p><button type="button" class="btn-sm" data-add>${t(lang, '+ Add a cash flow', '+ Adicionar fluxo')}</button> <span class="fh">${t(lang, `Up to ${core_1.MAX_GROUPS} flows, each repeated up to ${core_1.MAX_COUNT} times (the HP 12C's limits).`, `Até ${core_1.MAX_GROUPS} fluxos, cada um repetido até ${core_1.MAX_COUNT} vezes (os limites da HP 12C).`)}</span></p>`;
+<p><button type="button" class="btn-sm" data-add>${t(lang, '+ Add a cash flow', '+ Adicionar fluxo')}</button> <span class="fh">${t(lang, `Up to ${core_1.MAX_GROUPS} flows, each repeated up to ${core_1.MAX_COUNT} times: limits all three calculators accept.`, `Até ${core_1.MAX_GROUPS} fluxos, cada um repetido até ${core_1.MAX_COUNT} vezes: limites que as três calculadoras aceitam.`)}</span></p>`;
 }
 function amortForm(s, lang) {
     const v = (x) => (0, core_1.inputText)(x, lang);
@@ -1112,6 +1114,8 @@ function start() {
                 }
             });
         }
+        if (remember)
+            cfg.keysOnEdit = false;
         const r = read();
         mark(r.bad);
         if (!r.state) {
@@ -1217,6 +1221,7 @@ function start() {
         const r = (0, forms_1.fromQuery)(tool, q, boot.state);
         if (r.calc && !cfg.fixed)
             calc = r.calc;
+        cfg.keysOnEdit = false;
         fill(r.state);
         update(false);
     }
